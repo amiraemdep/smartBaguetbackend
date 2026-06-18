@@ -4,6 +4,7 @@
     {
         public int Id { get; set; }
 
+
         public string CodeBaguet { get; set; } = string.Empty;
 
         public string CodePlant { get; set; } = string.Empty;

@@ -152,4 +152,73 @@ public class BaguetController : ControllerBase
         return Ok(history);
     }
 
+
+    [HttpGet("plant/{codePlant}")]
+    public async Task<IActionResult> GetByCodePlant(string codePlant)
+    {
+        var plant = await _context.Plants
+            .FirstOrDefaultAsync(p => p.CodePlant == codePlant);
+
+        if (plant == null)
+        {
+            return NotFound(new { message = $"Plant \"{codePlant}\" introuvable" });
+        }
+
+        var baguet = await _context.Baguets
+            .FirstOrDefaultAsync(b => b.CurrentPlantId == plant.Id);
+
+        var result = new
+        {
+            type = "success",
+            codePlant = plant.CodePlant,
+            codeBaguet = baguet?.CodeBaguet,
+            client = plant.Client,
+            ot = plant.OT,
+            item = plant.ITEM,
+            ordre = plant.Ordre,
+            status = baguet?.Status ?? "NON_MARIE"
+        };
+
+        return Ok(result);
+    }
+
+    [HttpGet("info/{codeBaguet}")]
+    public async Task<IActionResult> GetByCodeBaguet(string codeBaguet)
+    {
+        var baguet = await _context.Baguets
+            .FirstOrDefaultAsync(b => b.CodeBaguet == codeBaguet);
+
+        if (baguet == null)
+        {
+            return NotFound(new { message = $"Baguet \"{codeBaguet}\" introuvable" });
+        }
+
+        if (baguet.Status == "VIDE" || baguet.CurrentPlantId == null)
+        {
+            return Ok(new
+            {
+                type = "vide",
+                codeBaguet = baguet.CodeBaguet,
+                status = baguet.Status,
+                message = "Baguet vide, aucun plant à l'intérieur"
+            });
+        }
+
+        var plant = await _context.Plants
+            .FirstOrDefaultAsync(p => p.Id == baguet.CurrentPlantId);
+
+        var result = new
+        {
+            type = "success",
+            codeBaguet = baguet.CodeBaguet,
+            codePlant = plant?.CodePlant,
+            client = plant?.Client,
+            ot = plant?.OT,
+            item = plant?.ITEM, 
+            ordre = plant?.Ordre,
+            status = baguet.Status
+        };
+
+        return Ok(result);
+    }
 }
