@@ -129,6 +129,9 @@ public class BaguetController : ControllerBase
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory()
     {
+
+
+
         var history = await (
             from h in _context.BaguetHistories
             join p in _context.Plants
@@ -137,7 +140,7 @@ public class BaguetController : ControllerBase
 
             orderby h.DateEntree descending
 
-            select new
+            select new 
             {
                 h.CodeBaguet,
                 h.CodePlant,
@@ -153,15 +156,15 @@ public class BaguetController : ControllerBase
     }
 
 
-    [HttpGet("plant/{codePlant}")]
-    public async Task<IActionResult> GetByCodePlant(string codePlant)
+    [HttpGet("plant/{codeBaguet}")]
+    public async Task<IActionResult> GetByCodePlant(string codeBaguet)
     {
         var plant = await _context.Plants
-            .FirstOrDefaultAsync(p => p.CodePlant == codePlant);
+            .FirstOrDefaultAsync(p => p.CodePlant == codeBaguet);
 
         if (plant == null)
         {
-            return NotFound(new { message = $"Plant \"{codePlant}\" introuvable" });
+            return NotFound(new { message = $"Plant \"{codeBaguet}\" introuvable" });
         }
 
         var baguet = await _context.Baguets
@@ -182,43 +185,124 @@ public class BaguetController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("info/{codeBaguet}")]
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetStats()
+    {
+        var totalBaguets = await _context.Baguets.CountAsync();
+
+        var baguetsCharges = await _context.Baguets
+            .CountAsync(x => x.Status == "CHARGE");
+
+        var baguetsVides = await _context.Baguets
+            .CountAsync(x => x.Status == "VIDE");
+
+        var plantsAujourdhui = await _context.BaguetHistories
+            .CountAsync(x => x.DateEntree.Date == DateTime.Today);
+
+        return Ok(new
+        {
+            totalBaguets,
+            baguetsCharges,
+            baguetsVides,
+            plantsAujourdhui
+        });
+    }
+    [HttpGet("search/{code}")]
+    public async Task<IActionResult> Search(string code)
+    {
+        var baguet = await _context.Baguets.FirstOrDefaultAsync(x => x.CodeBaguet == code);
+        if (baguet != null) return await GetByCodeBaguet(code);
+   
+
+        if (baguet != null)
+        {
+            return await GetByCodeBaguet(code);
+        }
+
+        var plant = await _context.Plants
+            .FirstOrDefaultAsync(x => x.CodePlant == code);
+
+        if (plant != null)
+        {
+            return await GetByCodePlant(code);
+        }
+
+        return NotFound(new
+        {
+            message = $"Code {code} introuvable"
+        });
+    }
+    private string GetTypeContrepartie(string type)
+    {
+        return type switch
+        {
+            "H" => "Hybrid",
+            "C" => "Combiné",
+            "P" => "Pneumatic",
+            "A" => "Assembly",
+            "V" => "Vision",
+            "U" => "Pull",
+            "W" => "Well Insertion",
+            _ => "Inconnu"
+        };
+    }
+
+    [HttpGet("by-baguet/{codeBaguet}")]
     public async Task<IActionResult> GetByCodeBaguet(string codeBaguet)
     {
         var baguet = await _context.Baguets
+            .Include(b => b.CurrentPlant)
             .FirstOrDefaultAsync(b => b.CodeBaguet == codeBaguet);
 
         if (baguet == null)
         {
-            return NotFound(new { message = $"Baguet \"{codeBaguet}\" introuvable" });
+            return NotFound(new { message = $"Baguette {codeBaguet} introuvable" });
         }
 
-        if (baguet.Status == "VIDE" || baguet.CurrentPlantId == null)
+        if (baguet.CurrentPlant == null)
         {
             return Ok(new
             {
-                type = "vide",
+                type = "warning",
                 codeBaguet = baguet.CodeBaguet,
-                status = baguet.Status,
-                message = "Baguet vide, aucun plant à l'intérieur"
+                status = "VIDE",
+                message = "Cette baguette ne contient aucun plant"
             });
         }
 
-        var plant = await _context.Plants
-            .FirstOrDefaultAsync(p => p.Id == baguet.CurrentPlantId);
+        var plant = baguet.CurrentPlant;
 
-        var result = new
+        string annee = "";
+        string ot = "";
+        string item = "";
+        string ordre = "";
+        string typeCode = "";
+        string typeContrepartie = "";
+
+        // ⚠️ On décode depuis plant.CodePlant (14 caractères), pas codeBaguet (8 chiffres)
+        if (!string.IsNullOrEmpty(plant.CodePlant) && plant.CodePlant.Length >= 14)
+        {
+            annee = "20" + plant.CodePlant.Substring(0, 2);
+            ot = plant.CodePlant.Substring(2, 5);
+            typeCode = plant.CodePlant.Substring(7, 1);
+            item = plant.CodePlant.Substring(8, 3);
+            ordre = plant.CodePlant.Substring(11, 3);
+            typeContrepartie = GetTypeContrepartie(typeCode);
+        }
+
+        return Ok(new
         {
             type = "success",
+            codePlant = plant.CodePlant,
             codeBaguet = baguet.CodeBaguet,
-            codePlant = plant?.CodePlant,
-            client = plant?.Client,
-            ot = plant?.OT,
-            item = plant?.ITEM, 
-            ordre = plant?.Ordre,
+            client = plant.Client,
+            annee,
+            ot,
+            item,
+            ordre,
+            typeCode,
+            typeContrepartie,
             status = baguet.Status
-        };
-
-        return Ok(result);
+        });
     }
 }
